@@ -1,51 +1,55 @@
-import { create } from 'zustand';
-import type { AtsScore, AnalysisResult } from '../hooks/useResumeAnalysis';
-import type { ParsedResume } from '../utils/resumeParser'; // Import the new type
+import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
+import type { ScoreBreakdown } from '../hooks/useResumeAnalysis';
+
+export type InterviewQuestion = { type: string; question: string }
 
 interface AppState {
-    // State
     resumeHtml: string;
     jobDescription: string;
-    initialAtsScore: AtsScore | null;
-    analysisResult: AnalysisResult | null;
+    analysisResult: { atsScore: ScoreBreakdown; aiSuggestions: string } | null;
+    structuredResumeData: any | null; // Keep as 'any' to match provided file
+    selectedTemplate: 'Modern' | 'Classic';
+    coverLetterHtml: string;
+    interviewQuestions: any[]; // Keep as 'any' to match provided file
+    suggestions: any; // Keep as 'any' to match provided file
     isLoading: boolean;
-    error: string | null;
-    // --- NEW: State for templates ---
-    structuredResumeData: ParsedResume | null;
-    selectedTemplate: 'classic' | 'modern';
+    error?: string;
 
-    // Actions
-    setResumeHtml: (html: string) => void;
-    setJobDescription: (jd: string) => void;
-    setLoading: (loading: boolean) => void;
-    setError: (error: string | null) => void;
-    setInitialAtsScore: (score: AtsScore | null) => void;
-    setAnalysisResult: (result: AnalysisResult | null) => void;
-    clearAnalysis: () => void;
-    // --- NEW: Actions for templates ---
-    setStructuredResumeData: (data: ParsedResume) => void;
-    setSelectedTemplate: (template: 'classic' | 'modern') => void;
+    set: (p: Partial<AppState>) => void;
+    reset: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
-    // Initial State
+
+const defaultState: Omit<AppState, 'set' | 'reset'> = {
     resumeHtml: '',
     jobDescription: '',
-    initialAtsScore: null,
     analysisResult: null,
-    isLoading: false,
-    error: null,
     structuredResumeData: null,
-    selectedTemplate: 'modern', // Default template
+    selectedTemplate: 'Modern',
+    coverLetterHtml: '',
+    interviewQuestions: [],
+    suggestions: '',
+    isLoading: false,
+    error: undefined,
+};
 
-    // Actions to update state
-    setResumeHtml: (html) => set({ resumeHtml: html }),
-    setJobDescription: (jd) => set({ jobDescription: jd }),
-    setLoading: (loading) => set({ isLoading: loading }),
-    setError: (error) => set({ error: error }),
-    setInitialAtsScore: (score) => set({ initialAtsScore: score, analysisResult: null }),
-    setAnalysisResult: (result) => set({ analysisResult: result }),
-    clearAnalysis: () => set({ initialAtsScore: null, analysisResult: null, error: null }),
-    setStructuredResumeData: (data) => set({ structuredResumeData: data }),
-    setSelectedTemplate: (template) => set({ selectedTemplate: template }),
-}));
+export const useAppStore = create<AppState>()(
+    persist(
+        (set) => ({
+            ...defaultState,
+            set: (p) => set(p),
+            reset: () => set({ ...defaultState })
+        }),
+        {
+            name: 'irb-app',
+            storage: createJSONStorage(() => localStorage),
+            partialize: (s) => ({
+                resumeHtml: s.resumeHtml,
+                jobDescription: s.jobDescription,
+                selectedTemplate: s.selectedTemplate,
+                coverLetterHtml: s.coverLetterHtml,
+            })
+        }
+    )
+);

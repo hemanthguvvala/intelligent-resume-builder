@@ -1,14 +1,18 @@
 import React, { FC } from 'react';
 
+type TabType = 'editor' | 'analysis' | 'cover-letter' | 'interview-prep' | 'preview';
+
 interface TabsProps {
-    activeTab: 'editor' | 'analysis' | 'preview';
-    setActiveTab: (tab: 'editor' | 'analysis' | 'preview') => void;
+    activeTab: TabType;
+    setActiveTab: (tab: TabType) => void;
 }
 
 const Tabs: FC<TabsProps> = ({ activeTab, setActiveTab }) => {
     const tabs = [
-        { id: 'editor', label: 'Editor' },
+        { id: 'editor', label: 'Resume Editor' },
         { id: 'analysis', label: 'Analysis & AI' },
+        { id: 'cover-letter', label: 'Cover Letter' },
+        { id: 'interview-prep', label: 'Interview Prep' },
         { id: 'preview', label: 'Preview & Download' },
     ];
 

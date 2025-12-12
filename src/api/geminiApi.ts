@@ -1,57 +1,74 @@
-export const getAiSuggestions = async (resume: string, jobDesc: string): Promise<string> => {
-    // IMPORTANT: Add your Google AI Studio API key here
-    const apiKey = "AIzaSyDqH1mY4zWlQUBgHLzFLxMRlgQ7ft1edgg";
-    if (!apiKey) {
-        throw new Error("API key is missing. Please add your Gemini API key in src/api/geminiApi.ts");
-    }
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+import type { InterviewQuestion } from '../store/useAppStore'
 
-    const isJobSpecific = jobDesc.trim().length > 0;
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
-    const prompt = `Act as a top-tier technical recruiter for a FAANG company. Analyze the provided resume.
-
-    **CRITICAL INSTRUCTIONS:**
-    1.  **Format your entire response using HTML** (h4, p, ul, li, strong, em tags).
-    2.  Provide specific, actionable, and concise suggestions based on authoritative best practices.
-    3.  Be direct and professional.
-
-    **ANALYSIS SECTIONS:**
-
-    <h4>Top Strengths</h4>
-    <p>Briefly mention 1-2 things the resume does well, citing best practices (e.g., "Excellent use of quantifiable metrics to show impact").</p>
-
-    <h4>Primary Areas to Improve</h4>
-    <p>This is the most important section. Provide a bulleted list of the 2-3 most critical improvements the candidate should make. Focus on rewriting bullet points for impact and aligning skills with the job description.</p>
-    
-    <h4>Example Rewritten Bullet Point</h4>
-    <p>Identify one weak bullet point from the resume and provide a rewritten "before" and "after" version that demonstrates the use of metrics and strong action verbs.</p>
-    
-    ${isJobSpecific
-            ? `<h4>Job Description Alignment</h4><p>Briefly comment on how well the resume aligns with the job description and mention any critical missing keywords.</p>`
-            : ''
-        }
-
-    **Resume (in HTML):**
-    ${resume}
-
-    ${isJobSpecific ? `**Job Description:**\n${jobDesc}` : ''}
-    `;
-
-
-    const payload = { contents: [{ parts: [{ text: prompt }] }] };
-
-    const response = await fetch(apiUrl, {
+async function callModel(prompt: string): Promise<string> {
+    const r = await fetch(`${API_BASE}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ prompt })
     });
-
-    if (!response.ok) {
-        const errorBody = await response.text();
-        console.error("API Error Response:", errorBody);
-        throw new Error(`API request failed with status ${response.status}`);
+    if (!r.ok) {
+        const err = await r.text();
+        throw new Error(`AI error: ${r.status} ${err}`);
     }
+    const data = await r.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
 
-    const result = await response.json();
-    return result.candidates?.[0]?.content?.parts?.[0]?.text || "<p>Could not generate AI suggestions. The response from the AI was empty.</p>";
-};
+export const getAiSuggestions = async (resume: string, jobDesc: string): Promise<string> => {
+    const isJobSpecific = jobDesc.trim().length > 0
+    const prompt = `Act as a top-tier technical recruiter for a FAANG company. Analyze the provided resume.
+
+**CRITICAL INSTRUCTIONS:**
+1. **Return HTML only** using <h4>, <p>, <ul>, <li>, <strong>, <em>.
+2. Make suggestions concrete and action-oriented.
+
+<h4>Top Strengths</h4>
+<p>1–2 concise points with examples.</p>
+
+<h4>Primary Areas to Improve</h4>
+<ul><li>Bullet-level edits.</li><li>Missing metrics.</li><li>Formatting gaps.</li></ul>
+
+<h4>Keyword Gaps${isJobSpecific ? ' (vs Job Description)' : ''}</h4>
+<ul></ul>
+
+<h4>5 Ready-to-Paste Bullets</h4>
+<ul></ul>
+
+---
+
+RESUME (plain text allowed):\n${resume.slice(0, 15000)}
+
+${isJobSpecific ? `JOB DESCRIPTION:\n${jobDesc.slice(0, 8000)}` : ''}`
+
+    return callModel(prompt)
+}
+
+export const getAiCoverLetter = async (resume: string, jobDesc: string): Promise<string> => {
+    const prompt = `Write a crisp, 250–350 word cover letter in HTML (<p>, <strong>, <em>, <ul>, <li>) referencing the resume and job description. Keep it specific and metric-driven.
+
+RESUME:\n${resume.slice(0, 12000)}\n\nJOB DESCRIPTION:\n${jobDesc.slice(0, 8000)}`
+    return callModel(prompt)
+}
+
+export const getAiInterviewQuestions = async (resume: string, jobDesc: string): Promise<InterviewQuestion[]> => {
+    const prompt = `Generate JSON array of interview questions with keys: type (Technical|Behavioral|Resume), question. 12–15 total.
+
+RESUME:\n${resume.slice(0, 10000)}\n\nJOB DESCRIPTION:\n${jobDesc.slice(0, 6000)}`
+    const raw = await callModel(prompt)
+    try {
+        const jsonStart = raw.indexOf('[')
+        const jsonEnd = raw.lastIndexOf(']')
+        const json = JSON.parse(raw.slice(jsonStart, jsonEnd + 1))
+        return json
+    } catch {
+        // Fallback: split lines
+        return raw
+            .split('\n')
+            .map((q: string) => q.trim())
+            .filter(Boolean)
+            .slice(0, 12)
+            .map((q: string) => ({ type: 'Technical', question: q }))
+    }
+}
